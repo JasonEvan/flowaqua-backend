@@ -169,13 +169,31 @@ runtime sesuai server AMD64, termasuk saat build dari mesin ARM64.
 
 ### Jalankan image dari registry
 
-Di server tujuan, sediakan `compose.yaml`, `Caddyfile`, dan `.env` dengan owner
-dan versi yang sama. Login GHCR jika package private (token dengan `read:packages`).
+Di server tujuan, sediakan `compose.yaml`, `Caddyfile`, `deploy.sh`, dan `.env`
+dengan owner dan versi yang sama. Login GHCR jika package private (token dengan
+`read:packages`). Contoh salin dari direktori backend di komputer lokal:
 
 ```sh
-docker compose pull
-docker compose up -d --no-build --wait
+scp compose.yaml Caddyfile deploy.sh USER@IP_SERVER:~/flowaqua-backend/
 ```
+
+Buat folder tujuan terlebih dahulu dan buat `.env` di server. Kemudian jalankan:
+
+```sh
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Script membaca `.env` di direktori script, sehingga dapat dipanggil dari direktori
+mana pun. Script melakukan `docker compose pull`, lalu
+`docker compose up -d --no-build --force-recreate --wait`, dan menampilkan status
+container. Jika pull gagal, langkah up tidak dijalankan. Script tidak login GHCR,
+build image, atau menghapus volume.
+
+`--force-recreate` membuat ulang backend dan Caddy pada setiap deploy, sehingga
+ada jeda layanan singkat. Volume sertifikat tetap dipertahankan. `--wait` menunggu
+backend healthy dan Caddy berjalan; tetap periksa HTTPS publik secara terpisah.
+Untuk rilis baru, ubah `VERSION` di `.env` server lalu jalankan `./deploy.sh` lagi.
 
 Untuk menghentikan container project:
 
