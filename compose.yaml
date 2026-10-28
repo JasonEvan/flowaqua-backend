@@ -1,0 +1,48 @@
+services:
+  backend:
+    platform: linux/amd64
+    image: ghcr.io/${GHCR_OWNER:?Set GHCR_OWNER in .env}/flowaqua-backend:${VERSION:?Set VERSION in .env}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: "--max-old-space-size=256"
+      PORT: "3000"
+    restart: unless-stopped
+    init: true
+    mem_limit: 384m
+    cpus: 1.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+  caddy:
+    platform: linux/amd64
+    image: caddy:2-alpine
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  caddy_data:
+  caddy_config:

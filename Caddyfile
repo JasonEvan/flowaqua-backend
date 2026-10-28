@@ -1,0 +1,3 @@
+api.aqua.flow-app.my.id {
+	reverse_proxy backend:3000
+}
