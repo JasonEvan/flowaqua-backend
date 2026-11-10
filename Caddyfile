@@ -1,3 +1,5 @@
 api.aqua.flow-app.my.id {
 	reverse_proxy backend:3000
 }
+
+import /etc/caddy/sites/*.caddy
