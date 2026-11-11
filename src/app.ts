@@ -2,7 +2,7 @@ import express from "express";
 import type { ErrorRequestHandler } from "express";
 import readingsRouter from "./routes/readings.js";
 import { requireDeviceToken } from "./device-auth.js";
-import { latestPrediction } from "./prediction.js";
+import { latestPrediction, predictionHistory } from "./prediction.js";
 
 const app = express();
 
@@ -21,6 +21,15 @@ app.use("/readings", readingsRouter);
 app.get("/prediction/latest", requireDeviceToken, async (_req, res) => {
   res.set("Cache-Control", "no-store");
   res.json(await latestPrediction());
+});
+
+app.get("/prediction/current", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json(await latestPrediction());
+});
+
+app.get("/prediction/history", async (_req, res) => {
+  res.json(await predictionHistory());
 });
 
 app.use((_req, res) => {

@@ -4,7 +4,7 @@ const HOUR = 3_600_000;
 const MAX_GAP = 300_000;
 const START_DEADLINE = 300_000;
 const MODEL_TIMEOUT = 15_000;
-const MODEL_URL = "https://ml.aqua.flow-app.my.id/predict";
+const MODEL_URL = process.env.MODEL_URL || "https://ml.aqua.flow-app.my.id/predict";
 
 interface Reading {
   measured_at: Date;
@@ -174,4 +174,25 @@ export async function latestPrediction(): Promise<object> {
     targetEnd: prediction.target_end,
     cycleId: prediction.cycle_id,
   };
+}
+
+export async function predictionHistory(): Promise<object[]> {
+  const rows: {
+    predicted_tds: number;
+    target_start: Date;
+    target_end: Date;
+    cycle_id: string;
+  }[] = await dataSource.query(
+    `SELECT predicted_tds, target_start, target_end, cycle_id
+     FROM prediction_runs
+     WHERE predicted_tds IS NOT NULL
+     ORDER BY target_start DESC
+     LIMIT 100`,
+  );
+  return rows.map((prediction) => ({
+    predictedTds: prediction.predicted_tds,
+    targetStart: prediction.target_start,
+    targetEnd: prediction.target_end,
+    cycleId: prediction.cycle_id,
+  }));
 }

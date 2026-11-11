@@ -11,6 +11,7 @@ services:
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
       DEVICE_API_TOKEN: ${DEVICE_API_TOKEN:-}
+      MODEL_URL: ${MODEL_URL:-https://ml.aqua.flow-app.my.id/predict}
     restart: unless-stopped
     init: true
     mem_limit: 384m

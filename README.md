@@ -40,6 +40,8 @@ Server default: `http://localhost:3000`. Ubah `PORT` di `.env` bila diperlukan. 
 | POST | `/readings` | 201 | Pembacaan yang disimpan, termasuk `id` dan `recordedAt` |
 | GET | `/readings?limit=100` | 200 | Array pembacaan terbaru, diurutkan dari waktu terbaru |
 | GET | `/prediction/latest` | 200 | Prediksi aktif atau `{"status":"unavailable"}` |
+| GET | `/prediction/current` | 200 | Prediksi aktif publik atau `{"status":"unavailable"}` |
+| GET | `/prediction/history` | 200 | Array publik hingga 100 prediksi sukses terbaru |
 | Semua | Route yang tidak terdaftar | 404 | `{"message":"Route not found"}` |
 
 Health check hanya menunjukkan server dapat menerima request; belum memeriksa layanan eksternal.
@@ -58,6 +60,8 @@ curl -i http://localhost:3000/readings \
 
 curl 'http://localhost:3000/readings?limit=100'
 curl -H "Authorization: Bearer $DEVICE_API_TOKEN" http://localhost:3000/prediction/latest
+curl http://localhost:3000/prediction/current
+curl http://localhost:3000/prediction/history
 ```
 
 Contoh respons POST (GET mengembalikan array objek dengan bentuk yang sama):
@@ -110,6 +114,18 @@ dan batasi akses jaringan: token bersama bukan identitas per perangkat, dan
 siapa pun yang mengetahuinya dapat mengirim pembacaan palsu.
 
 ### Prediksi otomatis
+GET `/prediction/current` bersifat publik dan memakai aturan ketersediaan yang
+sama dengan `/prediction/latest` untuk perangkat. Responsnya
+`{"status":"unavailable"}` jika tidak ada prediksi aktif yang valid; jika ada,
+respons berisi `status: "available"`, `predictedTds` (angka), `targetStart` dan
+`targetEnd` (timestamp ISO UTC), serta `cycleId` (string).
+
+GET `/prediction/history` juga publik dan mengembalikan array hingga 100
+prediksi yang berhasil, diurutkan berdasarkan `targetStart` terbaru. Setiap
+objek berisi `predictedTds`, `targetStart`, `targetEnd`, dan `cycleId` dengan
+tipe yang sama seperti respons prediksi aktif. Prediksi gagal atau belum
+selesai tidak disertakan; array kosong berarti belum ada prediksi berhasil.
+
 
 Pada awal setiap jam UTC server memakai empat jam UTC yang sudah selesai.
 Tiap jam harus memiliki sedikitnya 120 timestamp berbeda, celah antar sampel
@@ -118,6 +134,12 @@ sampel harus `STANDBY` dan memiliki cycleId yang sama; sesudah reboot atau
 penggantian air diperlukan empat jam baru. Tidak ada interpolasi atau data
 legacy dalam prediksi. Nilai masukan model adalah rata-rata aritmetika per jam.
 Prediksi adalah rata-rata TDS untuk jam UTC berikutnya setelah jam input terakhir.
+
+URL model dapat diatur melalui `MODEL_URL` (URL lengkap termasuk `/predict`).
+Default-nya `https://ml.aqua.flow-app.my.id/predict`. Untuk backend dan ML yang
+berjalan langsung pada komputer yang sama, gunakan
+`MODEL_URL=http://localhost:5001/predict`; jika backend dalam Docker, `localhost`
+merujuk ke container backend, jadi gunakan alamat yang dapat dijangkau container.
 
 Scheduler berjalan saat start dan tiap menit; ia hanya memulai request dalam
 lima menit pertama jam target, timeout model 15 detik. Reservasi unik PostgreSQL
