@@ -1,6 +1,8 @@
 import express from "express";
 import type { ErrorRequestHandler } from "express";
 import readingsRouter from "./routes/readings.js";
+import { requireDeviceToken } from "./device-auth.js";
+import { latestPrediction } from "./prediction.js";
 
 const app = express();
 
@@ -16,6 +18,10 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/readings", readingsRouter);
+app.get("/prediction/latest", requireDeviceToken, async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  res.json(await latestPrediction());
+});
 
 app.use((_req, res) => {
   res.status(404).json({ message: "Route not found" });

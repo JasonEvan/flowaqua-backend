@@ -5,6 +5,14 @@ export interface SensorReading {
   tdsPpm: number;
   temperatureC: number;
   recordedAt: Date;
+  measuredAt: Date | null;
+  cycleId: string | null;
+  pumpState: string | null;
+  triggerReason: "AI_PREDICTION" | "TDS_ACTUAL" | null;
+  triggerTds: number | null;
+  triggerPrediction: number | null;
+  triggerTargetStart: Date | null;
+  triggerTargetEnd: Date | null;
 }
 
 export const SensorReadingSchema = new EntitySchema<SensorReading>({
@@ -19,6 +27,40 @@ export const SensorReadingSchema = new EntitySchema<SensorReading>({
       type: "timestamptz",
       createDate: true,
       default: () => "CURRENT_TIMESTAMP",
+    },
+    measuredAt: { name: "measured_at", type: "timestamptz", nullable: true },
+    cycleId: { name: "cycle_id", type: "varchar", length: 128, nullable: true },
+    pumpState: {
+      name: "pump_state",
+      type: "varchar",
+      length: 32,
+      nullable: true,
+    },
+    triggerReason: {
+      name: "trigger_reason",
+      type: "varchar",
+      length: 32,
+      nullable: true,
+    },
+    triggerTds: {
+      name: "trigger_tds",
+      type: "double precision",
+      nullable: true,
+    },
+    triggerPrediction: {
+      name: "trigger_prediction",
+      type: "double precision",
+      nullable: true,
+    },
+    triggerTargetStart: {
+      name: "trigger_target_start",
+      type: "timestamptz",
+      nullable: true,
+    },
+    triggerTargetEnd: {
+      name: "trigger_target_end",
+      type: "timestamptz",
+      nullable: true,
     },
   },
   indices: [

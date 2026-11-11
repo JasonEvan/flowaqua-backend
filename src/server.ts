@@ -1,11 +1,13 @@
 import "dotenv/config";
 import app from "./app.js";
 import dataSource from "./data-source.js";
+import { startPredictionScheduler } from "./prediction.js";
 
 const port = Number(process.env.PORT ?? 3000);
 
 try {
   await dataSource.initialize();
+  startPredictionScheduler();
   app.listen(port, () => {
     console.log(`FlowAqua API running on port ${port}`);
   });

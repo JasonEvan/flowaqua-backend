@@ -3,6 +3,8 @@ import "dotenv/config";
 import { DataSource } from "typeorm";
 import { SensorReadingSchema } from "./entities/sensor-reading.js";
 import { CreateSensorReadings1793232000000 } from "./migrations/1793232000000-CreateSensorReadings.js";
+import { AddPrediction1793232000001 } from "./migrations/1793232000001-AddPrediction.js";
+import { AddCycleTrigger1793232000002 } from "./migrations/1793232000002-AddCycleTrigger.js";
 
 const url = process.env.DATABASE_URL;
 if (!url) {
@@ -16,7 +18,11 @@ export default new DataSource({
   url,
   ssl: false,
   entities: [SensorReadingSchema],
-  migrations: [CreateSensorReadings1793232000000],
+  migrations: [
+    CreateSensorReadings1793232000000,
+    AddPrediction1793232000001,
+    AddCycleTrigger1793232000002,
+  ],
   synchronize: false,
   migrationsRun: false,
   installExtensions: false,

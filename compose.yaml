@@ -10,6 +10,7 @@ services:
       NODE_OPTIONS: "--max-old-space-size=256"
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      DEVICE_API_TOKEN: ${DEVICE_API_TOKEN:-}
     restart: unless-stopped
     init: true
     mem_limit: 384m

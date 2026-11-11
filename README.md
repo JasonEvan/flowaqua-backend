@@ -10,7 +10,7 @@ Dari direktori project:
 ```sh
 npm install
 cp .env.example .env
-# Isi DATABASE_URL di .env sebelum menjalankan perintah berikut.
+# Isi DATABASE_URL dan DEVICE_API_TOKEN di .env sebelum menjalankan perintah berikut.
 npm run migration:run
 npm run dev
 ```
@@ -27,7 +27,7 @@ Server default: `http://localhost:3000`. Ubah `PORT` di `.env` bila diperlukan. 
 | `npm start` | Menjalankan hasil build; jalankan build terlebih dahulu |
 | `npm run migration:run` | Menerapkan migration dari source TypeScript |
 | `npm run migration:show` | Menampilkan status migration: `[X]` sudah diterapkan, `[ ]` belum diterapkan |
-| `npm run migration:revert` | Membatalkan migration terakhir; migration awal menghapus tabel beserta datanya |
+| `npm run migration:revert` | Migration prediksi sengaja tidak dapat dibatalkan untuk menjaga data; migration awal menghapus data |
 | `npm run migration:run:prod` | Menerapkan migration dari hasil build |
 | `npm run migration:revert:prod` | Membatalkan migration terakhir dari hasil build |
 
@@ -39,20 +39,25 @@ Server default: `http://localhost:3000`. Ubah `PORT` di `.env` bila diperlukan. 
 | GET | `/health` | 200 | `{"status":"ok"}` |
 | POST | `/readings` | 201 | Pembacaan yang disimpan, termasuk `id` dan `recordedAt` |
 | GET | `/readings?limit=100` | 200 | Array pembacaan terbaru, diurutkan dari waktu terbaru |
+| GET | `/prediction/latest` | 200 | Prediksi aktif atau `{"status":"unavailable"}` |
 | Semua | Route yang tidak terdaftar | 404 | `{"message":"Route not found"}` |
 
 Health check hanya menunjukkan server dapat menerima request; belum memeriksa layanan eksternal.
 
 ### Menyimpan dan membaca data sensor
 
-Untuk satu ESP32, body cukup berisi TDS dalam ppm dan suhu dalam Celsius:
+Untuk satu ESP32, kirim TDS dalam ppm, suhu dalam Celsius, waktu pengukuran UTC,
+identitas siklus unik dan status pompa. POST dan GET `/prediction/latest`
+memerlukan header `Authorization: Bearer <DEVICE_API_TOKEN>`.
 
 ```sh
 curl -i http://localhost:3000/readings \
+  -H "Authorization: Bearer $DEVICE_API_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"tdsPpm":450.25,"temperatureC":28.5}'
+  -d '{"tdsPpm":450.25,"temperatureC":28.5,"measuredAt":"2026-10-29T00:00:00Z","cycleId":"boot-1","pumpState":"STANDBY"}'
 
 curl 'http://localhost:3000/readings?limit=100'
+curl -H "Authorization: Bearer $DEVICE_API_TOKEN" http://localhost:3000/prediction/latest
 ```
 
 Contoh respons POST (GET mengembalikan array objek dengan bentuk yang sama):
@@ -62,19 +67,73 @@ Contoh respons POST (GET mengembalikan array objek dengan bentuk yang sama):
   "id": "991698b1-e433-4d72-b208-6152addc0d0a",
   "tdsPpm": 450.25,
   "temperatureC": 28.5,
+  "measuredAt": "2026-10-29T00:00:00.000Z",
+  "cycleId": "boot-1",
+  "pumpState": "STANDBY",
+  "triggerReason": null,
+  "triggerTds": null,
+  "triggerPrediction": null,
+  "triggerTargetStart": null,
+  "triggerTargetEnd": null,
   "recordedAt": "2026-10-29T00:00:00.000Z"
 }
 ```
 
-`recordedAt` dibuat database saat data diterima, bukan waktu pengukuran ESP32.
-Field tambahan tidak disimpan. TDS harus angka finite >= 0; suhu harus angka finite
->= -273.15. Angka dalam bentuk string, field wajib yang hilang, dan JSON rusak
-menghasilkan HTTP 400. `limit` default 100, minimum 1, maksimum 1000;
-nilai tidak valid menghasilkan HTTP 400. GET mengambil data terbaru, bukan seluruh
-histori. Kegagalan internal menghasilkan JSON HTTP 500 tanpa detail database.
+`recordedAt` dibuat database saat diterima; `measuredAt` adalah waktu sensor,
+ISO UTC berakhiran Z dengan presisi detik atau milidetik, maksimum 120 detik
+terlambat dan 30 detik di masa depan. Contoh waktu di atas harus diganti waktu
+terkini. `cycleId` adalah 1–128 karakter ASCII huruf/angka, `_`, atau `-`;
+ESP32 harus membuat ID baru setiap boot dan setiap mulai penggantian air.
+`pumpState` adalah `STANDBY`, `FILLING`, `DRAINING`, `REFILLING`,
+`WAIT_TDS_CLEAR`, atau `FAULT`. Ketiganya wajib bersama; payload legacy tanpa
+ketiganya masih disimpan tetapi tidak pernah digunakan untuk prediksi. Data
+lama tidak di-backfill. Field tambahan tidak disimpan. TDS harus finite >= 0;
+suhu finite >= -273.15. `limit` GET default 100, maksimum 1000.
 
-Endpoint belum memakai autentikasi. Jangan membuka POST ke internet tanpa
-proteksi akses; RLS Supabase tidak mengautentikasi request ke backend ini.
+Metadata penyebab siklus opsional: `triggerReason` adalah `AI_PREDICTION`,
+`TDS_ACTUAL`, atau null. Ketika ada alasan, `triggerTds` wajib berupa angka
+finite >= 0. Untuk `AI_PREDICTION`, `triggerPrediction` wajib finite >= 0 dan
+`triggerTargetStart` serta `triggerTargetEnd` wajib berupa timestamp ISO UTC
+valid dan berurutan. Untuk `TDS_ACTUAL` ketiga field prediksi tersebut harus
+null atau tidak dikirim. Jika alasan null atau tidak dikirim, semua field trigger
+lain juga harus null atau tidak dikirim; payload lama tetap kompatibel.
+GET `/readings` mengembalikan metadata ini untuk setiap pembacaan. Firmware
+mengirim snapshot penyebab siklus yang sama pada setiap sampel setelah mulai
+siklus hingga boot berikutnya; ini bukan log transisi lengkap yang dijamin,
+terutama saat perangkat atau jaringan offline.
+
+Atur `DEVICE_API_TOKEN` ke rahasia acak panjang yang sama di backend dan ESP32,
+melalui environment atau `.env` (Compose meneruskannya). Jangan commit rahasia.
+Jika kosong atau `CHANGE_ME`, kedua endpoint perangkat gagal tertutup dengan
+503; token salah menghasilkan 401. GET `/readings` tetap publik. Gunakan HTTPS
+dan batasi akses jaringan: token bersama bukan identitas per perangkat, dan
+siapa pun yang mengetahuinya dapat mengirim pembacaan palsu.
+
+### Prediksi otomatis
+
+Pada awal setiap jam UTC server memakai empat jam UTC yang sudah selesai.
+Tiap jam harus memiliki sedikitnya 120 timestamp berbeda, celah antar sampel
+dan ke batas jam maksimum 5 menit, suhu 0–55 °C dan TDS 0–2000 ppm. Semua
+sampel harus `STANDBY` dan memiliki cycleId yang sama; sesudah reboot atau
+penggantian air diperlukan empat jam baru. Tidak ada interpolasi atau data
+legacy dalam prediksi. Nilai masukan model adalah rata-rata aritmetika per jam.
+Prediksi adalah rata-rata TDS untuk jam UTC berikutnya setelah jam input terakhir.
+
+Scheduler berjalan saat start dan tiap menit; ia hanya memulai request dalam
+lima menit pertama jam target, timeout model 15 detik. Reservasi unik PostgreSQL
+mencegah request ganda lintas instance atau restart; kegagalan/crash setelah
+reservasi tidak dicoba lagi dalam jam itu. Restart terlambat, coverage kurang,
+respons model gagal/tidak valid atau data lama menghasilkan unavailable, bukan
+prediksi palsu atau hasil jam sebelumnya. Database harus dimigrasikan sebelum
+server dimulai. Endpoint mengembalikan available hanya saat jam target aktif,
+telemetri terbaru kurang dari dua menit, dalam `STANDBY`, dan cycleId cocok;
+perubahan state/siklus atau celah telemetri lebih dari dua menit selama jam target
+membatalkan hasil untuk sisa jam itu:
+`{"status":"available","predictedTds":500,"targetStart":"...Z","targetEnd":"...Z","cycleId":"boot-1"}`.
+Jika tidak, hasil `{"status":"unavailable"}`. ESP32 tetap wajib memeriksa jam,
+jendela dan cycleId-nya sendiri; backend tidak dapat mendeteksi reboot atau
+perubahan siklus yang belum terkirim. Akurasi model di luar data pelatihan tidak
+dijamin dan prediksi tidak menggantikan pengaman pompa.
 
 ## Koneksi Supabase
 
@@ -125,8 +184,7 @@ npm run migration:run:prod
 npm start
 ```
 
-Atur `PORT` dan `DATABASE_URL` melalui environment atau `.env`.
-Autentikasi endpoint belum disertakan.
+Atur `PORT`, `DATABASE_URL`, dan `DEVICE_API_TOKEN` melalui environment atau `.env`.
 
 ## Docker dan GHCR
 
